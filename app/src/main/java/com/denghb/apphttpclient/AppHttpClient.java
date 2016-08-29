@@ -1,8 +1,8 @@
 package com.denghb.apphttpclient;
 
-import android.content.Context;
+import android.app.Application;
+import android.os.Handler;
 import android.os.Looper;
-import android.os.MessageQueue;
 import android.text.TextUtils;
 
 import java.io.BufferedReader;
@@ -11,119 +11,183 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLConnection;
+import java.security.cert.X509Certificate;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.zip.GZIPInputStream;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+
 /**
- * Created by ppd on 16/8/29.
+ * Created by denghb on 16/8/29.
  */
 public class AppHttpClient {
 
-    private Context mContext;
+    public class Response<T> {
+        private int code;
 
-    public AppHttpClient(Context context){
-        mContext = context;
+        private T body;
+
+        private Map<String, String> header;
+
+        public int getCode() {
+            return code;
+        }
+
+        public void setCode(int code) {
+            this.code = code;
+        }
+
+        public T getBody() {
+            return body;
+        }
+
+        public void setBody(T body) {
+            this.body = body;
+        }
+
+        public Map<String, String> getHeader() {
+            return header;
+        }
+
+        public void setHeader(Map<String, String> header) {
+            this.header = header;
+        }
     }
 
-    public interface CompletionHandler{
-        public void response(byte[] bytes, Map<String,String> header, IOException e);
+    public interface CompletionHandler<T> {
+        public void response(Response<T> response, Exception e);
     }
 
-    private void execute(final String url,final Map<String,String> parameters,CompletionHandler handler) {
+    private static Handler mHander = new Handler();
+
+    private void execute(final String url, final String method, final Map<String, String> parameters, final CompletionHandler handler) {
         boolean isMainThread = Looper.myLooper() != Looper.getMainLooper();
 
         // 主线程
         ExecutorService service = Executors.newFixedThreadPool(2);
 
-        Future<URLConnection> future = service.submit(new Callable<URLConnection>() {
+        service.submit(new Runnable() {
             @Override
-            public URLConnection call() throws Exception {
+            public void run() {
 
-                String content = null;
+                final Response response = new Response();
+                final Exception exception = null;
+                HttpURLConnection connection = null;
+                try {
 
-                HttpURLConnection conn = (HttpURLConnection)getConn(url);
+                    connection = getHttpConnection(url, method);
+                    connection.connect();
 
-                    conn.connect();
-                    if (200 == conn.getResponseCode()) {
-                        InputStream inputStream = null;
-                        if (!TextUtils.isEmpty(conn.getContentEncoding())) {
-                            String encode = conn.getContentEncoding().toLowerCase();
-                            if (!TextUtils.isEmpty(encode) && encode.indexOf("gzip") >= 0) {
-                                inputStream = new GZIPInputStream(conn.getInputStream());
-                            }
+
+                    InputStream inputStream = null;
+                    if (!TextUtils.isEmpty(connection.getContentEncoding())) {
+                        String encode = connection.getContentEncoding().toLowerCase();
+                        if (!TextUtils.isEmpty(encode) && encode.indexOf("gzip") >= 0) {
+                            inputStream = new GZIPInputStream(connection.getInputStream());
                         }
-
-                        if (null == inputStream) {
-                            inputStream = conn.getInputStream();
-                        }
-
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
-                        StringBuilder builder = new StringBuilder();
-                        String line = null;
-                        while ((line = reader.readLine()) != null) {
-                            builder.append(line).append("\n");
-                        }
-                        content = builder.toString();
-                        handler.response(content.getBytes(),getHttpResponseHeader(conn),null);
-                    }else{
-                        handler.response(content.getBytes(),getHttpResponseHeader(conn),null);
                     }
 
-                return null;
+                    if (null == inputStream) {
+                        inputStream = connection.getInputStream();
+                    }
+
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
+                    StringBuilder builder = new StringBuilder();
+                    String line = null;
+                    while ((line = reader.readLine()) != null) {
+                        builder.append(line).append("\n");
+                    }
+
+                    response.setBody(builder.toString());
+                    response.setCode(connection.getResponseCode());
+                    response.setHeader(getHttpResponseHeader(connection));
+
+
+                } catch (Exception e) {
+
+                } finally {
+                    if (null != connection) {
+                        connection.disconnect();
+                    }
+                }
+
+                mHander.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        handler.response(response, exception);
+                    }
+                });
             }
-
-
-
         });
-        while(!future.isDone()){
-            URLConnection conn = null;
-            try {
-                conn = future.get();
-                handler.response(null, getHttpResponseHeader(conn), null);
-            }catch (IOException e){
-
-            }finally {
-
-            }
-
-        }
 
     }
 
-    public void get(String url,CompletionHandler handler){
-
-
-
+    public void get(String url, CompletionHandler handler) {
+        execute(url, "GET", null, handler);
     }
 
 
-
-    private URLConnection getConn(String urlString) throws IOException {
+    private HttpURLConnection getHttpConnection(String urlString, String method) throws IOException {
         URL url = new URL(urlString);
 
-        URLConnection conn = url.openConnection();
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(30000);
-        conn.setDoOutput(true);
-        conn.setDoInput(true);
-        conn.setUseCaches(false);
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setConnectTimeout(5000);
+        connection.setReadTimeout(30000);
+        connection.setDoOutput(true);
+        connection.setDoInput(true);
+        connection.setUseCaches(false);
         // 请求头
-        conn.setRequestProperty("Connection", "Keep-Alive");
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows; U; Windows NT 6.1; zh-CN; rv:1.9.2.6)");
-        conn.setRequestProperty("Charset", "UTF-8");
+        connection.setRequestProperty("Connection", "Keep-Alive");
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows; U; Windows NT 6.1; zh-CN; rv:1.9.2.6)");
+        connection.setRequestProperty("Charset", "UTF-8");
 
-        return conn;
+        connection.setRequestMethod(method);
+
+        if (connection instanceof HttpsURLConnection) {
+            ((HttpsURLConnection) connection).setSSLSocketFactory(getTrustAllSSLSocketFactory());
+        }
+        return connection;
     }
+
+    public static SSLSocketFactory getTrustAllSSLSocketFactory() {
+        // 信任所有证书
+        TrustManager[] trustAllCerts = new TrustManager[]{
+                new X509TrustManager() {
+                    @Override
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return null;
+                    }
+
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                    }
+                }};
+        try {
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAllCerts, null);
+            return sslContext.getSocketFactory();
+        } catch (Throwable ex) {
+
+        }
+        return null;
+    }
+
     private static Map<String, String> getHttpResponseHeader(HttpURLConnection http) {
         Map<String, String> header = new LinkedHashMap<String, String>();
-        for (int i = 0;; i++) {
+        for (int i = 0; ; i++) {
             String mine = http.getHeaderField(i);
             if (mine == null)
                 break;
