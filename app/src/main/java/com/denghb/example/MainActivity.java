@@ -1,24 +1,19 @@
 package com.denghb.example;
 
 import android.app.Activity;
-import android.database.DataSetObserver;
 import android.os.Bundle;
+import android.os.Environment;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.AdapterView;
-import android.widget.BaseAdapter;
-import android.widget.ListAdapter;
 import android.widget.ListView;
-import android.widget.SimpleAdapter;
-import android.widget.TextView;
 
 import com.denghb.apphttpclient.AppHttpClient;
 
-import org.w3c.dom.Text;
-
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -40,20 +35,57 @@ public class MainActivity extends Activity {
 
         mAdapter = new TextAdapter(this, data);
         mList.setAdapter(mAdapter);
+
+
         mList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
 
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-                if (0 == position) {
-                    AppHttpClient client = new AppHttpClient();
-                    client.get("https://denghb.com", new AppHttpClient.CompletionHandler() {
-                        @Override
-                        public void response(final AppHttpClient.Response response, Exception e) {
-                            MainActivity.this.setTitle("GET SUCCESS");
-                            System.out.println("response code:" + response.getCode());
+                switch (position) {
+                    case 0: {
+                        AppHttpClient client = new AppHttpClient();
+                        client.get("https://denghb.com", new AppHttpClient.CompletionHandler<String>() {
+                            @Override
+                            public void response(final AppHttpClient.Response<String> response, Exception e) {
+                                MainActivity.this.setTitle("GET SUCCESS");
+                                System.out.println("GET response code:" + response.getCode());
 
+                            }
+                        });
+                        break;
+                    }
+                    case 1: {
+                        try {
+                            System.out.println("@@@@@:" + Environment.getExternalStorageDirectory());
+                            File file = new File(Environment.getExternalStorageDirectory(), "/DCIM/100ANDRO/QQ20160519-0@2x.png");
+                            FileInputStream is = new FileInputStream(file);
+                            byte[] bytes = new byte[is.available()];
+                            is.read(bytes);
+                            is.close();
+
+                            Map<String, Object> filemap = new HashMap<String, Object>();
+                            filemap.put("file_name", "QQ.png");
+                            filemap.put("file_data", bytes);
+
+                            Map<String, Object> parameters = new HashMap<String, Object>();
+                            parameters.put("file", filemap);
+                            parameters.put("name", "张三");
+
+                            AppHttpClient client = new AppHttpClient();
+                            client.post("https://denghb.com/", parameters, new AppHttpClient.CompletionHandler() {
+                                @Override
+                                public void response(AppHttpClient.Response response, Exception e) {
+                                    System.out.println("POST response code:" + response.getCode());
+                                }
+                            });
+
+                        } catch (FileNotFoundException e) {
+                            e.printStackTrace();
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-                    });
+                        break;
+                    }
                 }
             }
         });

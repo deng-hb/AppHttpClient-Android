@@ -1,11 +1,11 @@
 package com.denghb.apphttpclient;
 
-import android.app.Application;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 
 import java.io.BufferedReader;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -13,11 +13,10 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.cert.X509Certificate;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -69,7 +68,7 @@ public class AppHttpClient {
 
     private static Handler mHander = new Handler();
 
-    private void execute(final String url, final String method, final Map<String, String> parameters, final CompletionHandler handler) {
+    private void execute(final String url, final String method, final Map<String, Object> parameters, final CompletionHandler handler) {
         boolean isMainThread = Looper.myLooper() != Looper.getMainLooper();
 
         // 主线程
@@ -82,11 +81,72 @@ public class AppHttpClient {
                 final Response response = new Response();
                 final Exception exception = null;
                 HttpURLConnection connection = null;
+                DataOutputStream output = null;
                 try {
 
-                    connection = getHttpConnection(url, method);
-                    connection.connect();
+                    connection = getHttpConnection(url, method, parameters);
+                    // 判断是否是文件流
+                    boolean isMultipart = false;
+                    for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+                        Object object = entry.getValue();
+                        if (object instanceof Map || object instanceof List) {
+                            isMultipart = true;
+                            break;
+                        }
+                    }
 
+                    if (isMultipart) {
+                        String boundary = "AppHttpClinet-denghb-com";
+                        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+
+                        output = new DataOutputStream(connection.getOutputStream());
+
+
+                        boundary = "--" + boundary;
+                        for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+                            String key = entry.getKey();
+                            Object value = entry.getValue();
+
+                            if (value instanceof List) {
+                                List<Map<String, Object>> list = (List<Map<String, Object>>) value;
+                                for (Map<String, Object> map : list) {
+                                    appendData(map, output, boundary, key);
+                                }
+
+                            } else if (value instanceof Map) {
+                                Map<String, Object> map = (Map) value;
+                                appendData(map, output, boundary, key);
+                            } else {
+                                StringBuilder sb = new StringBuilder();
+                                sb.append(boundary);
+                                sb.append("\r\nContent-Disposition: form-data; name=\"");
+                                sb.append(key);
+                                sb.append("\"\r\n");
+                                sb.append(value);
+                                sb.append("\r\n");
+                                output.writeBytes(sb.toString());
+                            }
+
+                        }
+
+                        output.writeBytes(boundary + "--\r\n");// 数据结束标志
+                        output.flush();
+
+                    } else {
+                        // 纯文本
+                        StringBuilder sb = new StringBuilder();
+                        for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+                            sb.append(entry.getKey());
+                            sb.append("=");
+                            sb.append(entry.getValue());
+                            sb.append("&");
+                        }
+
+                        output.writeBytes(sb.toString());
+                        output.flush();
+                        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                    }
+                    connection.connect();
 
                     InputStream inputStream = null;
                     if (!TextUtils.isEmpty(connection.getContentEncoding())) {
@@ -118,8 +178,16 @@ public class AppHttpClient {
                     if (null != connection) {
                         connection.disconnect();
                     }
+                    if (null != output) {
+                        try {
+                            output.close();
+                        } catch (IOException e) {
+
+                        }
+                    }
                 }
 
+                // TODO 需要弱引用
                 mHander.post(new Runnable() {
                     @Override
                     public void run() {
@@ -135,8 +203,12 @@ public class AppHttpClient {
         execute(url, "GET", null, handler);
     }
 
+    public void post(String url, Map<String, Object> parameters, CompletionHandler handler) {
+        execute(url, "POST", parameters, handler);
+    }
 
-    private HttpURLConnection getHttpConnection(String urlString, String method) throws IOException {
+
+    private HttpURLConnection getHttpConnection(String urlString, String method, Map<String, Object> parameters) throws IOException {
         URL url = new URL(urlString);
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
@@ -152,13 +224,33 @@ public class AppHttpClient {
 
         connection.setRequestMethod(method);
 
+
         if (connection instanceof HttpsURLConnection) {
             ((HttpsURLConnection) connection).setSSLSocketFactory(getTrustAllSSLSocketFactory());
         }
         return connection;
     }
 
-    public static SSLSocketFactory getTrustAllSSLSocketFactory() {
+
+    private void appendData(Map<String, Object> map, DataOutputStream output, String boundary, String name) {
+
+        byte[] bytes = (byte[]) map.get("file_data");
+        String fileName = (String) map.get("file_name");
+
+        StringBuilder split = new StringBuilder();
+        split.append(boundary);
+        split.append(String.format("\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"", name, fileName));
+        split.append("\r\nContent-Type: application/octet-stream\r\n\r\n");
+        try {
+            output.writeBytes(split.toString());
+            output.write(bytes);
+            output.writeBytes("\r\n");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static SSLSocketFactory getTrustAllSSLSocketFactory() {
         // 信任所有证书
         TrustManager[] trustAllCerts = new TrustManager[]{
                 new X509TrustManager() {
