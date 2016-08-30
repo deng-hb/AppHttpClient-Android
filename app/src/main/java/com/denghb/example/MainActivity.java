@@ -44,12 +44,16 @@ public class MainActivity extends Activity {
                 switch (position) {
                     case 0: {
                         AppHttpClient client = new AppHttpClient();
-                        client.get("https://denghb.com", new AppHttpClient.CompletionHandler<String>() {
+                        client.get("http://192.168.1.12:8090/", new AppHttpClient.CompletionHandler<String>() {
                             @Override
                             public void response(final AppHttpClient.Response<String> response, Exception e) {
-                                MainActivity.this.setTitle("GET SUCCESS");
-                                System.out.println("GET response code:" + response.getCode());
 
+                                System.out.println("GET response code:" + response.getCode());
+                                if(null != e){
+                                    MainActivity.this.setTitle("GET ERROR");
+                                }else {
+                                    MainActivity.this.setTitle("GET SUCCESS");
+                                }
                             }
                         });
                         break;
@@ -57,25 +61,33 @@ public class MainActivity extends Activity {
                     case 1: {
                         try {
                             System.out.println("@@@@@:" + Environment.getExternalStorageDirectory());
-                            File file = new File(Environment.getExternalStorageDirectory(), "/DCIM/100ANDRO/QQ20160519-0@2x.png");
+                            File file = new File(Environment.getExternalStorageDirectory() + "/xxx.dmg");
                             FileInputStream is = new FileInputStream(file);
+
+                            System.out.println(is.available());
+
                             byte[] bytes = new byte[is.available()];
                             is.read(bytes);
                             is.close();
 
                             Map<String, Object> filemap = new HashMap<String, Object>();
-                            filemap.put("file_name", "QQ.png");
+                            filemap.put("file_name", "QQ.dmg");
                             filemap.put("file_data", bytes);
 
                             Map<String, Object> parameters = new HashMap<String, Object>();
-                            parameters.put("file", filemap);
-                            parameters.put("name", "张三");
+                            parameters.put("images", filemap);
+                            parameters.put("amount", "张三");
 
                             AppHttpClient client = new AppHttpClient();
-                            client.post("https://denghb.com/", parameters, new AppHttpClient.CompletionHandler() {
+                            client.post("http://192.168.1.12:8090/upload", parameters, new AppHttpClient.CompletionHandler() {
                                 @Override
                                 public void response(AppHttpClient.Response response, Exception e) {
                                     System.out.println("POST response code:" + response.getCode());
+                                    if(null != e){
+                                        MainActivity.this.setTitle("POST ERROR");
+                                    }else {
+                                        MainActivity.this.setTitle("POST SUCCESS");
+                                    }
                                 }
                             });
 
@@ -88,14 +100,17 @@ public class MainActivity extends Activity {
                     }
                     case 2: {
                         AppHttpClient client = new AppHttpClient();
-                        client.download("http://hbimg.b0.upaiyun.com/b93086446c5caf125a9ea121aa209e8195d55f7341ac6-qC2VA7_fw658", Environment.getExternalStorageDirectory() + "/xxx.jpg", new AppHttpClient.ProgressHandler() {
+                        client.download("http://192.168.1.12:8090/download", Environment.getExternalStorageDirectory() + "/xxx.dmg", new AppHttpClient.ProgressHandler() {
                             @Override
                             public void progress(double progress) {
+                                MainActivity.this.setTitle("Download Progress:" + (int) progress + "%");
                                 System.out.println("++++++++++++++++++progress:" + progress);
                             }
                         }, new AppHttpClient.CompletionHandler() {
                             @Override
                             public void response(AppHttpClient.Response response, Exception e) {
+                                MainActivity.this.setTitle("Download Progress SUCCESS");
+
                                 System.out.println("++++++++++++++++++response code:" + response.getCode());
                             }
                         });

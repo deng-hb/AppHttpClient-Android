@@ -145,7 +145,7 @@ public class AppHttpClient {
                                         sb.append(boundary);
                                         sb.append("\r\nContent-Disposition: form-data; name=\"");
                                         sb.append(key);
-                                        sb.append("\"\r\n");
+                                        sb.append("\"\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n");
                                         sb.append(value);
                                         sb.append("\r\n");
                                         output.writeBytes(sb.toString());
@@ -174,6 +174,9 @@ public class AppHttpClient {
 
                         connection.connect();
 
+                        response.setCode(connection.getResponseCode());
+                        response.setHeader(getHttpResponseHeader(connection));
+
                         InputStream inputStream = null;
                         if (!TextUtils.isEmpty(connection.getContentEncoding())) {
                             String encode = connection.getContentEncoding().toLowerCase();
@@ -197,9 +200,6 @@ public class AppHttpClient {
                         }
 
                         response.setBody(builder.toString());
-
-                        response.setCode(connection.getResponseCode());
-                        response.setHeader(getHttpResponseHeader(connection));
 
                     } catch (Exception e) {
                         exception = e;
@@ -234,6 +234,19 @@ public class AppHttpClient {
             service.submit(new Runnable() {
                 @Override
                 public void run() {
+
+                    // 返回进度信息
+                    Runnable progressRunnable = new Runnable() {
+                        @Override
+                        public void run() {
+                            if (null != progress) {
+                                progress.progress(progressNumber);
+                                mHandler.postDelayed(this,1000);
+                            }
+                        }
+                    };
+
+
                     final Response response = new Response();
                     HttpURLConnection connection = null;
                     OutputStream output = null;
@@ -248,14 +261,7 @@ public class AppHttpClient {
                         int fileLength = connection.getContentLength();
 
 
-                        mHandler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (null != progress) {
-                                    progress.progress(progressNumber);
-                                }
-                            }
-                        }, 100);//每1秒执行一次返回进度
+                        mHandler.postDelayed(progressRunnable, 1000);//每1秒执行一次返回进度
                         InputStream input = connection.getInputStream();
 
                         output = new FileOutputStream(parameters.get("saveAs").toString());
@@ -292,6 +298,8 @@ public class AppHttpClient {
                             }
                         }
                     });
+                    // 移除进度
+                    mHandler.removeCallbacks(progressRunnable);
                 }
             });
         }
@@ -302,7 +310,7 @@ public class AppHttpClient {
         URL url = new URL(urlString);
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setConnectTimeout(5000);
+        connection.setConnectTimeout(60000);// 连接1分钟
         connection.setReadTimeout(30000);
         connection.setDoOutput(true);
         connection.setDoInput(true);
@@ -311,7 +319,6 @@ public class AppHttpClient {
         connection.setRequestProperty("Connection", "Keep-Alive");
         connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36");
         connection.setRequestProperty("Charset", "UTF-8");
-        connection.setRequestProperty("Cookie","Hm_lvt_4aa2af3ba32bf53eba883d71ab4a699e=1472452941,1472549691; Hm_lpvt_4aa2af3ba32bf53eba883d71ab4a699e=147254969");
         if ("POST".equalsIgnoreCase(method)) {
             connection.setRequestMethod("POST");
         }
@@ -331,7 +338,7 @@ public class AppHttpClient {
         StringBuilder split = new StringBuilder();
         split.append(boundary);
         split.append(String.format("\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"", name, fileName));
-        split.append("\r\nContent-Type: application/octet-stream\r\n\r\n");
+        split.append("\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: binary\r\n\r\n");
         try {
             output.writeBytes(split.toString());
             output.write(bytes);
