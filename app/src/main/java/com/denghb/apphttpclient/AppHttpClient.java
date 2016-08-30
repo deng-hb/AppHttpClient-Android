@@ -64,6 +64,9 @@ public class AppHttpClient {
         }
     }
 
+    private double progressNumber;
+    private Exception exception;
+
     public interface CompletionHandler<T> {
         public void response(Response<T> response, Exception e);
     }
@@ -99,7 +102,6 @@ public class AppHttpClient {
                 public void run() {
 
                     final Response response = new Response();
-                    Exception exception = null;
                     HttpURLConnection connection = null;
                     DataOutputStream output = null;
                     try {
@@ -201,6 +203,7 @@ public class AppHttpClient {
 
                     } catch (Exception e) {
                         exception = e;
+                        e.printStackTrace();
                     } finally {
                         if (null != connection) {
                             connection.disconnect();
@@ -216,12 +219,11 @@ public class AppHttpClient {
                     }
 
                     // TODO 需要弱引用
-                    final Exception finalException = exception;
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
                             if (null != completion) {
-                                completion.response(response, finalException);
+                                completion.response(response, exception);
                             }
                         }
                     });
@@ -233,7 +235,6 @@ public class AppHttpClient {
                 @Override
                 public void run() {
                     final Response response = new Response();
-                    Exception exception = null;
                     HttpURLConnection connection = null;
                     OutputStream output = null;
                     try {
@@ -247,17 +248,14 @@ public class AppHttpClient {
                         int fileLength = connection.getContentLength();
 
 
-                        double pro = 0.0;
-
-                        final double finalPro = pro;
                         mHandler.postDelayed(new Runnable() {
                             @Override
                             public void run() {
                                 if (null != progress) {
-                                    progress.progress(finalPro);
+                                    progress.progress(progressNumber);
                                 }
                             }
-                        }, 1000);//每1秒执行一次返回进度
+                        }, 100);//每1秒执行一次返回进度
                         InputStream input = connection.getInputStream();
 
                         output = new FileOutputStream(parameters.get("saveAs").toString());
@@ -268,8 +266,10 @@ public class AppHttpClient {
                         while ((count = input.read(data)) != -1) {
                             total += count;
                             output.write(data, 0, count);
-                            pro = total * 100.0 / fileLength;
+                            progressNumber = total * 100.0 / fileLength;
                         }
+                        output.flush();
+                        input.close();
 
 
                     } catch (Exception e) {
@@ -284,12 +284,11 @@ public class AppHttpClient {
 
 
                     // TODO 需要弱引用
-                    final Exception finalException = exception;
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
                             if (null != completion) {
-                                completion.response(response, finalException);
+                                completion.response(response, exception);
                             }
                         }
                     });

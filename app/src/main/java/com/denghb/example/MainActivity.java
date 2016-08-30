@@ -88,7 +88,7 @@ public class MainActivity extends Activity {
                     }
                     case 2: {
                         AppHttpClient client = new AppHttpClient();
-                        client.download("http://image.baidu.com/search/down?tn=download&word=download&ie=utf8&fr=detail&url=http%3A%2F%2Fimg.99118.com%2FBig6%2FYuan%2F19201200%2F2011617%2F7320108.jpg", Environment.getExternalStorageDirectory() + "/xxx.jpg", new AppHttpClient.ProgressHandler() {
+                        client.download("http://hbimg.b0.upaiyun.com/b93086446c5caf125a9ea121aa209e8195d55f7341ac6-qC2VA7_fw658", Environment.getExternalStorageDirectory() + "/xxx.jpg", new AppHttpClient.ProgressHandler() {
                             @Override
                             public void progress(double progress) {
                                 System.out.println("++++++++++++++++++progress:" + progress);
