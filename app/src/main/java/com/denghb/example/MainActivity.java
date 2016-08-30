@@ -24,7 +24,7 @@ public class MainActivity extends Activity {
     private ListView mList;
     private TextAdapter mAdapter;
 
-    private static String[] data = new String[]{"GET", "POST"};
+    private static String[] data = new String[]{"GET", "POST", "Download"};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -84,6 +84,22 @@ public class MainActivity extends Activity {
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
+                        break;
+                    }
+                    case 2: {
+                        AppHttpClient client = new AppHttpClient();
+                        client.download("http://image.baidu.com/search/down?tn=download&word=download&ie=utf8&fr=detail&url=http%3A%2F%2Fimg.99118.com%2FBig6%2FYuan%2F19201200%2F2011617%2F7320108.jpg", Environment.getExternalStorageDirectory() + "/xxx.jpg", new AppHttpClient.ProgressHandler() {
+                            @Override
+                            public void progress(double progress) {
+                                System.out.println("++++++++++++++++++progress:" + progress);
+                            }
+                        }, new AppHttpClient.CompletionHandler() {
+                            @Override
+                            public void response(AppHttpClient.Response response, Exception e) {
+                                System.out.println("++++++++++++++++++response code:" + response.getCode());
+                            }
+                        });
+
                         break;
                     }
                 }

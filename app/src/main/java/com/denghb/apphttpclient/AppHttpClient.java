@@ -1,17 +1,19 @@
 package com.denghb.apphttpclient;
 
 import android.os.Handler;
-import android.os.Looper;
 import android.text.TextUtils;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.cert.X509Certificate;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,145 +68,234 @@ public class AppHttpClient {
         public void response(Response<T> response, Exception e);
     }
 
-    private static Handler mHander = new Handler();
+    public interface ProgressHandler {
+        public void progress(double progress);
+    }
 
-    private void execute(final String url, final String method, final Map<String, Object> parameters, final CompletionHandler handler) {
-        boolean isMainThread = Looper.myLooper() != Looper.getMainLooper();
+    private static Handler mHandler = new Handler();
 
+    public void get(String url, CompletionHandler completion) {
+        execute(url, "GET", null, null, completion);
+    }
+
+    public void post(String url, Map<String, Object> parameters, CompletionHandler completion) {
+        execute(url, "POST", parameters, null, completion);
+    }
+
+    public void download(String url, String saveAs, ProgressHandler progress, CompletionHandler completion) {
+
+        Map<String,Object> map = new HashMap<>();
+        map.put("saveAs",saveAs);
+        execute(url, "DOWNLOAD", map, progress, completion);
+    }
+
+    private void execute(final String url, final String method, final Map<String, Object> parameters, final ProgressHandler progress, final CompletionHandler completion) {
         // 主线程
         ExecutorService service = Executors.newFixedThreadPool(2);
 
-        service.submit(new Runnable() {
-            @Override
-            public void run() {
+        if (!"DOWNLOAD".equals(method)) {
+            service.submit(new Runnable() {
+                @Override
+                public void run() {
 
-                final Response response = new Response();
-                final Exception exception = null;
-                HttpURLConnection connection = null;
-                DataOutputStream output = null;
-                try {
+                    final Response response = new Response();
+                    Exception exception = null;
+                    HttpURLConnection connection = null;
+                    DataOutputStream output = null;
+                    try {
 
-                    connection = getHttpConnection(url, method, parameters);
-                    // 判断是否是文件流
-                    boolean isMultipart = false;
-                    for (Map.Entry<String, Object> entry : parameters.entrySet()) {
-                        Object object = entry.getValue();
-                        if (object instanceof Map || object instanceof List) {
-                            isMultipart = true;
-                            break;
-                        }
-                    }
+                        connection = getHttpConnection(url, method, parameters);
 
-                    if (isMultipart) {
-                        String boundary = "AppHttpClinet-denghb-com";
-                        connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
-
-                        output = new DataOutputStream(connection.getOutputStream());
-
-
-                        boundary = "--" + boundary;
-                        for (Map.Entry<String, Object> entry : parameters.entrySet()) {
-                            String key = entry.getKey();
-                            Object value = entry.getValue();
-
-                            if (value instanceof List) {
-                                List<Map<String, Object>> list = (List<Map<String, Object>>) value;
-                                for (Map<String, Object> map : list) {
-                                    appendData(map, output, boundary, key);
+                        if (null != parameters) {
+                            // 判断是否是文件流
+                            boolean isMultipart = false;
+                            for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+                                Object object = entry.getValue();
+                                if (object instanceof Map || object instanceof List) {
+                                    isMultipart = true;
+                                    break;
                                 }
-
-                            } else if (value instanceof Map) {
-                                Map<String, Object> map = (Map) value;
-                                appendData(map, output, boundary, key);
-                            } else {
-                                StringBuilder sb = new StringBuilder();
-                                sb.append(boundary);
-                                sb.append("\r\nContent-Disposition: form-data; name=\"");
-                                sb.append(key);
-                                sb.append("\"\r\n");
-                                sb.append(value);
-                                sb.append("\r\n");
-                                output.writeBytes(sb.toString());
                             }
 
+                            if (isMultipart) {
+                                String boundary = "AppHttpClinet-denghb-com";
+                                connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+
+                                output = new DataOutputStream(connection.getOutputStream());
+
+
+                                boundary = "--" + boundary;
+                                for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+                                    String key = entry.getKey();
+                                    Object value = entry.getValue();
+
+                                    if (value instanceof List) {
+                                        List<Map<String, Object>> list = (List<Map<String, Object>>) value;
+                                        for (Map<String, Object> map : list) {
+                                            appendData(map, output, boundary, key);
+                                        }
+
+                                    } else if (value instanceof Map) {
+                                        Map<String, Object> map = (Map) value;
+                                        appendData(map, output, boundary, key);
+                                    } else {
+                                        StringBuilder sb = new StringBuilder();
+                                        sb.append(boundary);
+                                        sb.append("\r\nContent-Disposition: form-data; name=\"");
+                                        sb.append(key);
+                                        sb.append("\"\r\n");
+                                        sb.append(value);
+                                        sb.append("\r\n");
+                                        output.writeBytes(sb.toString());
+                                    }
+
+                                }
+
+                                output.writeBytes(boundary + "--\r\n");// 数据结束标志
+                                output.flush();
+
+                            } else {
+                                // 纯文本
+                                StringBuilder sb = new StringBuilder();
+                                for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+                                    sb.append(entry.getKey());
+                                    sb.append("=");
+                                    sb.append(entry.getValue());
+                                    sb.append("&");
+                                }
+
+                                output.writeBytes(sb.toString());
+                                output.flush();
+                                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                            }
                         }
 
-                        output.writeBytes(boundary + "--\r\n");// 数据结束标志
-                        output.flush();
+                        connection.connect();
 
-                    } else {
-                        // 纯文本
-                        StringBuilder sb = new StringBuilder();
-                        for (Map.Entry<String, Object> entry : parameters.entrySet()) {
-                            sb.append(entry.getKey());
-                            sb.append("=");
-                            sb.append(entry.getValue());
-                            sb.append("&");
+                        InputStream inputStream = null;
+                        if (!TextUtils.isEmpty(connection.getContentEncoding())) {
+                            String encode = connection.getContentEncoding().toLowerCase();
+                            if (!TextUtils.isEmpty(encode) && encode.indexOf("gzip") >= 0) {
+                                inputStream = new GZIPInputStream(connection.getInputStream());
+                            }
                         }
 
-                        output.writeBytes(sb.toString());
-                        output.flush();
-                        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-                    }
-                    connection.connect();
 
-                    InputStream inputStream = null;
-                    if (!TextUtils.isEmpty(connection.getContentEncoding())) {
-                        String encode = connection.getContentEncoding().toLowerCase();
-                        if (!TextUtils.isEmpty(encode) && encode.indexOf("gzip") >= 0) {
-                            inputStream = new GZIPInputStream(connection.getInputStream());
+                        if (null == inputStream) {
+                            inputStream = connection.getInputStream();
+                        }
+
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
+                        StringBuilder builder = new StringBuilder();
+
+
+                        String line = null;
+                        while ((line = reader.readLine()) != null) {
+                            builder.append(line).append("\n");
+                        }
+
+                        response.setBody(builder.toString());
+
+                        response.setCode(connection.getResponseCode());
+                        response.setHeader(getHttpResponseHeader(connection));
+
+                    } catch (Exception e) {
+                        exception = e;
+                    } finally {
+                        if (null != connection) {
+                            connection.disconnect();
+                            connection = null;
+                        }
+                        if (null != output) {
+                            try {
+                                output.close();
+                            } catch (IOException e) {
+
+                            }
                         }
                     }
 
-                    if (null == inputStream) {
-                        inputStream = connection.getInputStream();
-                    }
-
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
-                    StringBuilder builder = new StringBuilder();
-                    String line = null;
-                    while ((line = reader.readLine()) != null) {
-                        builder.append(line).append("\n");
-                    }
-
-                    response.setBody(builder.toString());
-                    response.setCode(connection.getResponseCode());
-                    response.setHeader(getHttpResponseHeader(connection));
-
-
-                } catch (Exception e) {
-
-                } finally {
-                    if (null != connection) {
-                        connection.disconnect();
-                    }
-                    if (null != output) {
-                        try {
-                            output.close();
-                        } catch (IOException e) {
-
+                    // TODO 需要弱引用
+                    final Exception finalException = exception;
+                    mHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (null != completion) {
+                                completion.response(response, finalException);
+                            }
                         }
-                    }
+                    });
                 }
+            });
+        } else {
 
-                // TODO 需要弱引用
-                mHander.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        handler.response(response, exception);
+            service.submit(new Runnable() {
+                @Override
+                public void run() {
+                    final Response response = new Response();
+                    Exception exception = null;
+                    HttpURLConnection connection = null;
+                    OutputStream output = null;
+                    try {
+                        connection = getHttpConnection(url, method, parameters);
+
+                        connection.connect();
+
+                        response.setCode(connection.getResponseCode());
+                        response.setHeader(getHttpResponseHeader(connection));
+
+                        int fileLength = connection.getContentLength();
+
+
+                        double pro = 0.0;
+
+                        final double finalPro = pro;
+                        mHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (null != progress) {
+                                    progress.progress(finalPro);
+                                }
+                            }
+                        }, 1000);//每1秒执行一次返回进度
+                        InputStream input = connection.getInputStream();
+
+                        output = new FileOutputStream(parameters.get("saveAs").toString());
+
+                        byte data[] = new byte[4096];
+                        long total = 0;
+                        int count;
+                        while ((count = input.read(data)) != -1) {
+                            total += count;
+                            output.write(data, 0, count);
+                            pro = total * 100.0 / fileLength;
+                        }
+
+
+                    } catch (Exception e) {
+                        exception = e;
+                        e.printStackTrace();
+                    } finally {
+                        if (null != connection) {
+                            connection.disconnect();
+                            connection = null;
+                        }
                     }
-                });
-            }
-        });
 
-    }
 
-    public void get(String url, CompletionHandler handler) {
-        execute(url, "GET", null, handler);
-    }
-
-    public void post(String url, Map<String, Object> parameters, CompletionHandler handler) {
-        execute(url, "POST", parameters, handler);
+                    // TODO 需要弱引用
+                    final Exception finalException = exception;
+                    mHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (null != completion) {
+                                completion.response(response, finalException);
+                            }
+                        }
+                    });
+                }
+            });
+        }
     }
 
 
@@ -219,11 +310,12 @@ public class AppHttpClient {
         connection.setUseCaches(false);
         // 请求头
         connection.setRequestProperty("Connection", "Keep-Alive");
-        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows; U; Windows NT 6.1; zh-CN; rv:1.9.2.6)");
+        connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36");
         connection.setRequestProperty("Charset", "UTF-8");
-
-        connection.setRequestMethod(method);
-
+        connection.setRequestProperty("Cookie","Hm_lvt_4aa2af3ba32bf53eba883d71ab4a699e=1472452941,1472549691; Hm_lpvt_4aa2af3ba32bf53eba883d71ab4a699e=147254969");
+        if ("POST".equalsIgnoreCase(method)) {
+            connection.setRequestMethod("POST");
+        }
 
         if (connection instanceof HttpsURLConnection) {
             ((HttpsURLConnection) connection).setSSLSocketFactory(getTrustAllSSLSocketFactory());
