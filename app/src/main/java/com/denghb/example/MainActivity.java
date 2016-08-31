@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
                                 } else {
                                     MainActivity.this.setTitle("Download SUCCESS");
                                 }
-                                System.out.println("++++++++++++++++++response code:" + response.getCode());
+                                System.out.println("Download response code:" + response.getCode());
                             }
                         });
 
