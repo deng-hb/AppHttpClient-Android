@@ -26,6 +26,8 @@ public class MainActivity extends Activity {
 
     private static String[] data = new String[]{"GET", "POST", "Download"};
 
+    private static final String SERVER_ADDERSS = "http://10.0.2.2:8090";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -44,14 +46,15 @@ public class MainActivity extends Activity {
                 switch (position) {
                     case 0: {
                         AppHttpClient client = new AppHttpClient();
-                        client.get("http://192.168.1.12:8090/", new AppHttpClient.CompletionHandler<String>() {
+                        client.get(SERVER_ADDERSS + "/", new AppHttpClient.CompletionHandler<String>() {
                             @Override
                             public void response(final AppHttpClient.Response<String> response, Exception e) {
 
                                 System.out.println("GET response code:" + response.getCode());
-                                if(null != e){
+                                if (null != e) {
                                     MainActivity.this.setTitle("GET ERROR");
-                                }else {
+                                    e.printStackTrace();
+                                } else {
                                     MainActivity.this.setTitle("GET SUCCESS");
                                 }
                             }
@@ -59,48 +62,44 @@ public class MainActivity extends Activity {
                         break;
                     }
                     case 1: {
-                        try {
-                            System.out.println("@@@@@:" + Environment.getExternalStorageDirectory());
-                            File file = new File(Environment.getExternalStorageDirectory() + "/xxx.dmg");
-                            FileInputStream is = new FileInputStream(file);
+//                            System.out.println("@@@@@:" + Environment.getExternalStorageDirectory());
+//                            File file = new File(Environment.getExternalStorageDirectory() + "/xxx.dmg");
+//                            FileInputStream is = new FileInputStream(file);
+//
+//                            System.out.println(is.available());
+//
+//                            byte[] bytes = new byte[is.available()];
+//                            is.read(bytes);
+//                            is.close();
 
-                            System.out.println(is.available());
+                        Map<String, Object> filemap = new HashMap<String, Object>();
+                        filemap.put("file_name", "QQ.png");
+//                            filemap.put("file_data", bytes);
+                        filemap.put("file_path", Environment.getExternalStorageDirectory() + "/xxx.png");
 
-                            byte[] bytes = new byte[is.available()];
-                            is.read(bytes);
-                            is.close();
+                        Map<String, Object> parameters = new HashMap<String, Object>();
+                        parameters.put("images", filemap);
+                        parameters.put("amount", "张三");
 
-                            Map<String, Object> filemap = new HashMap<String, Object>();
-                            filemap.put("file_name", "QQ.dmg");
-                            filemap.put("file_data", bytes);
-
-                            Map<String, Object> parameters = new HashMap<String, Object>();
-                            parameters.put("images", filemap);
-                            parameters.put("amount", "张三");
-
-                            AppHttpClient client = new AppHttpClient();
-                            client.post("http://192.168.1.12:8090/upload", parameters, new AppHttpClient.CompletionHandler() {
-                                @Override
-                                public void response(AppHttpClient.Response response, Exception e) {
-                                    System.out.println("POST response code:" + response.getCode());
-                                    if(null != e){
-                                        MainActivity.this.setTitle("POST ERROR");
-                                    }else {
-                                        MainActivity.this.setTitle("POST SUCCESS");
-                                    }
+                        AppHttpClient client = new AppHttpClient();
+                        client.post(SERVER_ADDERSS + "/upload", parameters, new AppHttpClient.CompletionHandler() {
+                            @Override
+                            public void response(AppHttpClient.Response response, Exception e) {
+                                System.out.println("POST response code:" + response.getCode());
+                                if (null != e) {
+                                    MainActivity.this.setTitle("POST ERROR");
+                                    e.printStackTrace();
+                                } else {
+                                    MainActivity.this.setTitle("POST SUCCESS");
                                 }
-                            });
+                            }
+                        });
 
-                        } catch (FileNotFoundException e) {
-                            e.printStackTrace();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
                         break;
                     }
                     case 2: {
                         AppHttpClient client = new AppHttpClient();
-                        client.download("http://192.168.1.12:8090/download", Environment.getExternalStorageDirectory() + "/xxx.dmg", new AppHttpClient.ProgressHandler() {
+                        client.download(SERVER_ADDERSS + "/assets/alipay.png", Environment.getExternalStorageDirectory() + "/xxx.png", new AppHttpClient.ProgressHandler() {
                             @Override
                             public void progress(double progress) {
                                 MainActivity.this.setTitle("Download Progress:" + (int) progress + "%");
@@ -109,8 +108,13 @@ public class MainActivity extends Activity {
                         }, new AppHttpClient.CompletionHandler() {
                             @Override
                             public void response(AppHttpClient.Response response, Exception e) {
-                                MainActivity.this.setTitle("Download Progress SUCCESS");
 
+                                if (null != e) {
+                                    MainActivity.this.setTitle("Download ERROR");
+                                    e.printStackTrace();
+                                } else {
+                                    MainActivity.this.setTitle("Download SUCCESS");
+                                }
                                 System.out.println("++++++++++++++++++response code:" + response.getCode());
                             }
                         });

@@ -1,10 +1,13 @@
 package com.denghb.apphttpclient;
 
+import android.os.Environment;
 import android.os.Handler;
 import android.text.TextUtils;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -87,8 +90,8 @@ public class AppHttpClient {
 
     public void download(String url, String saveAs, ProgressHandler progress, CompletionHandler completion) {
 
-        Map<String,Object> map = new HashMap<>();
-        map.put("saveAs",saveAs);
+        Map<String, Object> map = new HashMap<>();
+        map.put("saveAs", saveAs);
         execute(url, "DOWNLOAD", map, progress, completion);
     }
 
@@ -203,7 +206,6 @@ public class AppHttpClient {
 
                     } catch (Exception e) {
                         exception = e;
-                        e.printStackTrace();
                     } finally {
                         if (null != connection) {
                             connection.disconnect();
@@ -241,7 +243,7 @@ public class AppHttpClient {
                         public void run() {
                             if (null != progress) {
                                 progress.progress(progressNumber);
-                                mHandler.postDelayed(this,1000);
+                                mHandler.postDelayed(this, 1000);
                             }
                         }
                     };
@@ -266,12 +268,12 @@ public class AppHttpClient {
 
                         output = new FileOutputStream(parameters.get("saveAs").toString());
 
-                        byte data[] = new byte[4096];
+                        byte data[] = new byte[1024];
                         long total = 0;
                         int count;
                         while ((count = input.read(data)) != -1) {
-                            total += count;
                             output.write(data, 0, count);
+                            total += count;
                             progressNumber = total * 100.0 / fileLength;
                         }
                         output.flush();
@@ -280,7 +282,6 @@ public class AppHttpClient {
 
                     } catch (Exception e) {
                         exception = e;
-                        e.printStackTrace();
                     } finally {
                         if (null != connection) {
                             connection.disconnect();
@@ -310,10 +311,13 @@ public class AppHttpClient {
         URL url = new URL(urlString);
 
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setConnectTimeout(60000);// 连接1分钟
-        connection.setReadTimeout(30000);
-        connection.setDoOutput(true);
-        connection.setDoInput(true);
+        connection.setConnectTimeout(3000);// 3秒
+        connection.setReadTimeout(60000);// 1分钟
+
+        if (!"DOWNLOAD".equalsIgnoreCase(method)) {
+            connection.setDoOutput(true);
+            connection.setDoInput(true);
+        }
         connection.setUseCaches(false);
         // 请求头
         connection.setRequestProperty("Connection", "Keep-Alive");
@@ -330,21 +334,31 @@ public class AppHttpClient {
     }
 
 
-    private void appendData(Map<String, Object> map, DataOutputStream output, String boundary, String name) {
-
-        byte[] bytes = (byte[]) map.get("file_data");
-        String fileName = (String) map.get("file_name");
-
-        StringBuilder split = new StringBuilder();
-        split.append(boundary);
-        split.append(String.format("\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"", name, fileName));
-        split.append("\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: binary\r\n\r\n");
+    private void appendData(Map<String, Object> map, DataOutputStream output, String boundary, String name) throws Exception {
         try {
+            byte[] bytes = (byte[]) map.get("file_data");
+            String fileName = (String) map.get("file_name");
+
+            if (null == bytes) {
+                String filePath = (String) map.get("file_path");
+                File file = new File(filePath);
+                FileInputStream is = new FileInputStream(file);
+
+                bytes = new byte[is.available()];
+                is.read(bytes);
+                is.close();
+            }
+
+            StringBuilder split = new StringBuilder();
+            split.append(boundary);
+            split.append(String.format("\r\nContent-Disposition: form-data; name=\"%s\"; filename=\"%s\"", name, fileName));
+            split.append("\r\nContent-Type: application/octet-stream\r\nContent-Transfer-Encoding: binary\r\n\r\n");
+
             output.writeBytes(split.toString());
             output.write(bytes);
             output.writeBytes("\r\n");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        } catch (Exception e) {
+            throw e;
         }
     }
 
