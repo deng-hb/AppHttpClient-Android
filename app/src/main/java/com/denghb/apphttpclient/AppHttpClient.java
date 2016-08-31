@@ -112,6 +112,8 @@ public class AppHttpClient {
                         connection = getHttpConnection(url, method, parameters);
 
                         if (null != parameters) {
+
+
                             // 判断是否是文件流
                             boolean isMultipart = false;
                             for (Map.Entry<String, Object> entry : parameters.entrySet()) {
@@ -122,10 +124,10 @@ public class AppHttpClient {
                                 }
                             }
 
+
                             if (isMultipart) {
                                 String boundary = "AppHttpClinet-denghb-com";
                                 connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
-
                                 output = new DataOutputStream(connection.getOutputStream());
 
 
@@ -144,7 +146,7 @@ public class AppHttpClient {
                                         Map<String, Object> map = (Map) value;
                                         appendData(map, output, boundary, key);
                                     } else {
-                                        StringBuilder sb = new StringBuilder();
+                                        StringBuffer sb = new StringBuffer();
                                         sb.append(boundary);
                                         sb.append("\r\nContent-Disposition: form-data; name=\"");
                                         sb.append(key);
@@ -160,8 +162,11 @@ public class AppHttpClient {
                                 output.flush();
 
                             } else {
+                                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                                output = new DataOutputStream(connection.getOutputStream());
+
                                 // 纯文本
-                                StringBuilder sb = new StringBuilder();
+                                StringBuffer sb = new StringBuffer();
                                 for (Map.Entry<String, Object> entry : parameters.entrySet()) {
                                     sb.append(entry.getKey());
                                     sb.append("=");
@@ -171,7 +176,6 @@ public class AppHttpClient {
 
                                 output.writeBytes(sb.toString());
                                 output.flush();
-                                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
                             }
                         }
 
@@ -347,6 +351,9 @@ public class AppHttpClient {
                 bytes = new byte[is.available()];
                 is.read(bytes);
                 is.close();
+                if (null == fileName) {
+                    fileName = filePath.substring(filePath.lastIndexOf("/") + 1, filePath.length());
+                }
             }
 
             StringBuilder split = new StringBuilder();
