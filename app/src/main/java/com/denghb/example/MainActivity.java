@@ -29,7 +29,7 @@ public class MainActivity extends Activity {
 
     private static String[] data = new String[]{"GET", "POST", "Upload", "Uploads", "Download"};
 
-    private static final String SERVER_ADDERSS = "http://192.168.1.10:8090";
+    private static final String SERVER_ADDERSS = "http://denghb.com";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
